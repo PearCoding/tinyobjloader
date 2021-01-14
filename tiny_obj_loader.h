@@ -501,6 +501,7 @@ class MaterialStreamReader : public MaterialReader {
 // v2 API
 struct ObjReaderConfig {
   bool triangulate;  // triangulate polygon?
+  bool triangulate_skip_quads; // Do not triangulate quads
 
   /// Parse vertex color.
   /// If vertex color is not present, its filled with default value.
@@ -593,11 +594,12 @@ class ObjReader {
 /// or not.
 /// Option 'default_vcols_fallback' specifies whether vertex colors should
 /// always be defined, even if no colors are given (fallback to white).
+/// 'triangulate_skip_quads' is optional, and can only be used together with the 'triangulate' option. It will not triangulate quads.
 bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              std::vector<material_t> *materials, std::string *warn,
              std::string *err, const char *filename,
              const char *mtl_basedir = NULL, bool triangulate = true,
-             bool default_vcols_fallback = true);
+             bool default_vcols_fallback = true, bool triangulate_skip_quads = false);
 
 /// Loads .obj from a file with custom user callback.
 /// .mtl is loaded as usual and parsed material_t data will be passed to
@@ -618,7 +620,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              std::vector<material_t> *materials, std::string *warn,
              std::string *err, std::istream *inStream,
              MaterialReader *readMatFn = NULL, bool triangulate = true,
-             bool default_vcols_fallback = true);
+             bool default_vcols_fallback = true, bool triangulate_skip_quads = false);
 
 /// Loads materials into std::map
 void LoadMtl(std::map<std::string, int> *material_map,
@@ -1366,7 +1368,7 @@ static int pnpoly(int nvert, T *vertx, T *verty, T testx, T testy) {
 static bool exportGroupsToShape(shape_t *shape, const PrimGroup &prim_group,
                                 const std::vector<tag_t> &tags,
                                 const int material_id, const std::string &name,
-                                bool triangulate,
+                                bool triangulate, bool triangulate_skip_quads,
                                 const std::vector<real_t> &v) {
   if (prim_group.IsEmpty()) {
     return false;
@@ -1391,7 +1393,8 @@ static bool exportGroupsToShape(shape_t *shape, const PrimGroup &prim_group,
       vertex_index_t i1(-1);
       vertex_index_t i2 = face.vertex_indices[1];
 
-      if (triangulate) {
+      const bool do_triangulation = triangulate && (npolys > 4 || !triangulate_skip_quads);
+      if (do_triangulation) {
         // find the two axes to work in
         size_t axes[2] = {1, 2};
         for (size_t k = 0; k < npolys; ++k) {
@@ -2174,7 +2177,7 @@ bool MaterialStreamReader::operator()(const std::string &matId,
 bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              std::vector<material_t> *materials, std::string *warn,
              std::string *err, const char *filename, const char *mtl_basedir,
-             bool trianglulate, bool default_vcols_fallback) {
+             bool trianglulate, bool default_vcols_fallback, bool triangulate_skip_quads) {
   attrib->vertices.clear();
   attrib->normals.clear();
   attrib->texcoords.clear();
@@ -2204,14 +2207,14 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
   MaterialFileReader matFileReader(baseDir);
 
   return LoadObj(attrib, shapes, materials, warn, err, &ifs, &matFileReader,
-                 trianglulate, default_vcols_fallback);
+                 trianglulate, default_vcols_fallback, triangulate_skip_quads);
 }
 
 bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
              std::vector<material_t> *materials, std::string *warn,
              std::string *err, std::istream *inStream,
              MaterialReader *readMatFn /*= NULL*/, bool triangulate,
-             bool default_vcols_fallback) {
+             bool default_vcols_fallback, bool triangulate_skip_quads) {
   std::stringstream errss;
 
   std::vector<real_t> v;
@@ -2485,7 +2488,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
         // this time.
         // just clear `faceGroup` after `exportGroupsToShape()` call.
         exportGroupsToShape(&shape, prim_group, tags, material, name,
-                            triangulate, v);
+                            triangulate, triangulate_skip_quads, v);
         prim_group.faceGroup.clear();
         material = newMaterialId;
       }
@@ -2548,7 +2551,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
     if (token[0] == 'g' && IS_SPACE((token[1]))) {
       // flush previous face group.
       bool ret = exportGroupsToShape(&shape, prim_group, tags, material, name,
-                                     triangulate, v);
+                                     triangulate, triangulate_skip_quads, v);
       (void)ret;  // return value not used.
 
       if (shape.mesh.indices.size() > 0) {
@@ -2600,7 +2603,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
     if (token[0] == 'o' && IS_SPACE((token[1]))) {
       // flush previous face group.
       bool ret = exportGroupsToShape(&shape, prim_group, tags, material, name,
-                                     triangulate, v);
+                                     triangulate, triangulate_skip_quads, v);
       (void)ret;  // return value not used.
 
       if (shape.mesh.indices.size() > 0 || shape.lines.indices.size() > 0 ||
@@ -2740,7 +2743,7 @@ bool LoadObj(attrib_t *attrib, std::vector<shape_t> *shapes,
   }
 
   bool ret = exportGroupsToShape(&shape, prim_group, tags, material, name,
-                                 triangulate, v);
+                                 triangulate, triangulate_skip_quads, v);
   // exportGroupsToShape return false when `usemtl` is called in the last
   // line.
   // we also add `shape` to `shapes` when `shape.mesh` has already some
