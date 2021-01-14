@@ -3071,7 +3071,7 @@ bool ObjReader::ParseFromFile(const std::string &filename,
 
   valid_ = LoadObj(&attrib_, &shapes_, &materials_, &warning_, &error_,
                    filename.c_str(), mtl_search_path.c_str(),
-                   config.triangulate, config.vertex_color);
+                   config.triangulate, config.vertex_color, config.triangulate_skip_quads);
 
   return valid_;
 }
@@ -3088,7 +3088,7 @@ bool ObjReader::ParseFromString(const std::string &obj_text,
   MaterialStreamReader mtl_ss(mtl_ifs);
 
   valid_ = LoadObj(&attrib_, &shapes_, &materials_, &warning_, &error_,
-                   &obj_ifs, &mtl_ss, config.triangulate, config.vertex_color);
+                   &obj_ifs, &mtl_ss, config.triangulate, config.vertex_color, config.triangulate_skip_quads);
 
   return valid_;
 }
